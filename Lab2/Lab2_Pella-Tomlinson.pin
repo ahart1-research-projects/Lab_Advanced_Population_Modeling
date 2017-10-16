@@ -1,0 +1,14 @@
+# Number of parameters = 5 Objective function value = 2217359318.94209  Maximum gradient component = 2323.50207880419
+# dummy:
+0.00000000000
+# logr:
+-2
+# logK:
+8
+# No log sigma since not estimated
+# logit_p:
+-0.2
+# transformed_m starting value
+0.2
+
+
