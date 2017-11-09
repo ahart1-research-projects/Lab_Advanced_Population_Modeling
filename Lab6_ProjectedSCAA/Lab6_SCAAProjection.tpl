@@ -33,6 +33,9 @@ DATA_SECTION
   init_int nage_fishery;                           // number of yrs of fishery age comp data
   init_matrix agecomp_f(1,nage_fishery,1,nage+2);  // matrix of fishery age comps
 
+  init_int nprojyears; // number of years in projection
+  init_number projFfull; // projection F at full recruitment
+
   ivector agecols(1,nage);    //ivector for storing the columns that contain the age data
   ivector ages(1,nage);       // index vector for computing things like selectivity
   !! for (age=1;age<=nage;age++) agecols(age) = 2 + age;
@@ -90,17 +93,21 @@ PARAMETER_SECTION
   // temporary variables
   number fpen;  // penalty to prevent catch > biomass
   number survival; // survival from removing catch for penalty
+  
 // population dynamics variables
   vector Ffull(fyear,lyear); // fishing mortality for fully vunerable ages
   matrix F(fyear,lyear,fage,lage); // fishing mortality
-  matrix N(fyear,lyear+1,fage,lage); // abundance
-  vector SSB(fyear,lyear+1); //spawning biomass
+  matrix N(fyear,lyear+nprojyears+1,fage,lage); // abundance over time series and projected years, could make separate matrices
+  vector SSB(fyear,lyear+nprojyears+1); //spawning biomass over time series and projected years
+  vector projF(fage,lage); // Projected F at age
+  vector projY(lyear+1,lyear+1+nprojyears); // projected yield
 
   matrix pred_survey(1,nsurvey,fage,lage);  //predicted survey numbers at age
   vector pred_survey_bio(1,nsurvey);   //predicted survey biomass
 
-  matrix pred_age_survey(1,nage_survey,fage,lage);  //predicted survey catch at age
-  matrix pred_age_fishery(1,nage_fishery,fage,lage); //predicted fishery catch at age
+  matrix pred_age_survey(1,nage_survey,fage,lage);  // model predicted survey catch at age
+  matrix pred_age_fishery(1,nage_fishery,fage,lage); //model predicted fishery catch at age
+  matrix proj_age_fishery(lyear+1,lyear+nprojyears,fage,lage); // Could have combined with pred_age_fishery matrix, chose to separate 
 
   objective_function_value obj_fun;    //value to be minimized
 
@@ -128,7 +135,23 @@ PROCEDURE_SECTION
   pen_recruits();
  
   cout << "total " << obj_fun << endl;
-
+ 
+ // Projection Calculations (similar equations to earlier estimates, just use projected F (projF) instead
+   // I could make this section of code a function and call that function here rather than writing out here
+   // This code doesn't add to the objective function
+   // Could loop over lyear+nprojyears+1 for N and SSB and loop over lyear+nprojyears for Yield and Catch
+ projF = projFfull*f_sel; // projected full F * selectivity at age, f_sel is an estimated vector
+ for(year=lyear+2;year<=lyear+nprojyears;year++){
+   for (age=fage+1;age<=lage;age++){ // loop over age
+     N(year,age) = N(year-1,age-1)*mfexp(-1.*(M+projF(age-1))); // abundance at age = survival from previous age * survival in current age
+     proj_age_fishery(year,age) = N(year,age)*projF(age)*(1.-mfexp(-1.*(M+projF(age))))/(M+projF(age));
+   }
+   N(year,lage) += N(year-1,lage)*mfexp(-1.*(M+projF(lage))); // Cumulatively adds to plus group abundance at age
+   N(year,fage) = 4.*h*Rzero*SSB(year-1)/(SSBzero*(1.-h)+SSB(year-1)*(5.*h-1)); // Calculate first age group (recruits) using beverton-holt equation and the parameter estimates from above
+   projY(year) = sum(elem_prod(proj_age_fishery(year),wt));
+   SSB(year) = sum(elem_prod(elem_prod(N(year),mat),wt));
+ }
+ 
 
 FUNCTION transform_params
   //transform parameters
@@ -310,14 +333,22 @@ FUNCTION pen_recruits
   obj_fun += nrecdevs*log(sigmaR) + 0.5*norm2(recdevs)/square(sigmaR);
   if (diag==1) cout << "recruitment penalty  " << obj_fun << endl;
 
+
 GLOBALS_SECTION
   #include <admodel.h>
 
 REPORT_SECTION
-//  report model estimates
-  report << "biomass" << endl;
-  for (year=fyear;year<=(lyear+1);year++)
-   report << year << " " << biomass(year) << endl;
+ // Math error in this section could lead to your model not converging 
+ //  report model estimates
+  report << "Year estimated_SSB" << endl;
+  for (year=fyear;year<=lyear+1;year++){
+   report << year << " " << SSB(year) << endl;
+  }
+  report << "year projected_F projected_SSB projected_Yield" << endl;
+  for (year=lyear+2;year<=lyear+nprojyears+1;year++){
+   report << year << " " << projFfull << " " << SSB(year) << " " << projY(year) << endl;
+   // In last year SSB reported only if projection looped over nproj+1, no projFfull, no projY reported
+  }
    
   report << "parameters" << endl;
   report << "h" << " " << h << endl;
