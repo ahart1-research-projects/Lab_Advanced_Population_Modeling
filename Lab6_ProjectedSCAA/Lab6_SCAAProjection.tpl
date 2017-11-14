@@ -136,22 +136,6 @@ PROCEDURE_SECTION
  
   cout << "total " << obj_fun << endl;
  
- // Projection Calculations (similar equations to earlier estimates, just use projected F (projF) instead
-   // I could make this section of code a function and call that function here rather than writing out here
-   // This code doesn't add to the objective function
-   // Could loop over lyear+nprojyears+1 for N and SSB and loop over lyear+nprojyears for Yield and Catch
- projF = projFfull*f_sel; // projected full F * selectivity at age, f_sel is an estimated vector
- for(year=lyear+2;year<=lyear+nprojyears;year++){
-   for (age=fage+1;age<=lage;age++){ // loop over age
-     N(year,age) = N(year-1,age-1)*mfexp(-1.*(M+projF(age-1))); // abundance at age = survival from previous age * survival in current age
-     proj_age_fishery(year,age) = N(year,age)*projF(age)*(1.-mfexp(-1.*(M+projF(age))))/(M+projF(age));
-   }
-   N(year,lage) += N(year-1,lage)*mfexp(-1.*(M+projF(lage))); // Cumulatively adds to plus group abundance at age
-   N(year,fage) = 4.*h*Rzero*SSB(year-1)/(SSBzero*(1.-h)+SSB(year-1)*(5.*h-1)); // Calculate first age group (recruits) using beverton-holt equation and the parameter estimates from above
-   projY(year) = sum(elem_prod(proj_age_fishery(year),wt));
-   SSB(year) = sum(elem_prod(elem_prod(N(year),mat),wt));
- }
- 
 
 FUNCTION transform_params
   //transform parameters
@@ -338,6 +322,24 @@ GLOBALS_SECTION
   #include <admodel.h>
 
 REPORT_SECTION
+   // Projection Calculations (similar equations to earlier estimates, just use projected F (projF) instead
+     // This doesn't alter the objective function so we can do these calculations here
+   // I could make this section of code a function and call that function here rather than writing out here
+   // This code doesn't add to the objective function
+   // Could loop over lyear+nprojyears+1 for N and SSB and loop over lyear+nprojyears for Yield and Catch
+ projF = projFfull*f_sel; // projected full F * selectivity at age, f_sel is an estimated vector
+ for(year=lyear+2;year<=lyear+nprojyears;year++){
+   for (age=fage+1;age<=lage;age++){ // loop over age
+     N(year,age) = N(year-1,age-1)*mfexp(-1.*(M+projF(age-1))); // abundance at age = survival from previous age * survival in current age
+     proj_age_fishery(year,age) = N(year,age)*projF(age)*(1.-mfexp(-1.*(M+projF(age))))/(M+projF(age));
+   }
+   N(year,lage) += N(year-1,lage)*mfexp(-1.*(M+projF(lage))); // Cumulatively adds to plus group abundance at age
+   N(year,fage) = 4.*h*Rzero*SSB(year-1)/(SSBzero*(1.-h)+SSB(year-1)*(5.*h-1)); // Calculate first age group (recruits) using beverton-holt equation and the parameter estimates from above
+   projY(year) = sum(elem_prod(proj_age_fishery(year),wt));
+   SSB(year) = sum(elem_prod(elem_prod(N(year),mat),wt));
+ }
+
+
  // Math error in this section could lead to your model not converging 
  //  report model estimates
   report << "Year estimated_SSB" << endl;
